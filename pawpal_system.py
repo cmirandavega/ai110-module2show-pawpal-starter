@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import List, Optional
 from enum import Enum
-from collections import defaultdict, Counter
+from collections import defaultdict
 import datetime
 import uuid
 
@@ -288,11 +288,6 @@ class Scheduler:
                     f"Time overload in {slot}: {total} min [{names}] "
                     f"exceeds {TIME_SLOT_BUDGET[slot]} min budget"
                 )
-            for task_type, count in Counter(t.task_type for t in slot_tasks).items():
-                if count > 1:
-                    conflicts.append(
-                        f"Duplicate '{task_type}' tasks in {slot} slot ({count} tasks)"
-                    )
         return conflicts
 
     def _check_overlap_conflicts(self, tasks: List[Task]) -> List[str]:
