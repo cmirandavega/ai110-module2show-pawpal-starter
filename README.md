@@ -22,6 +22,30 @@ Your final app should:
 - Display the plan clearly (and ideally explain the reasoning)
 - Include tests for the most important scheduling behaviors
 
+## Smarter Scheduling
+
+The scheduling logic in `pawpal_system.py` has been upgraded with several algorithms that make the daily plan more intelligent and realistic.
+
+**Priority + time sorting**
+Tasks are sorted by priority first (HIGH → MEDIUM → LOW), then by `start_time` within the same priority level. A `start_time` field in `HH:MM` format was added to `Task` so the scheduler can order tasks chronologically across the day rather than by insertion order.
+
+**Frequency filtering**
+Tasks have a `frequency` field (`daily`, `weekly`, `as-needed`). The scheduler now acts on it — daily tasks are always included, weekly tasks are only scheduled on Mondays, and as-needed tasks are excluded unless manually added. Skipped tasks are logged in the scheduling reasoning.
+
+**Conflict detection**
+Before or after generating a plan, `detect_conflicts()` checks for three types of problems:
+- Time slot overload — tasks in the same slot (morning/afternoon/evening) exceed the 120-minute slot budget
+- Duplicate task types — two tasks of the same type (e.g. two `feeding` tasks) in the same slot
+- Window overlap — two tasks whose `start_time` + `duration` windows physically overlap, with the exact overlap in minutes reported
+
+**Recurring task renewal**
+When a task is marked complete via `complete_task()`, the scheduler automatically creates a fresh copy for the next occurrence — tomorrow for daily tasks, one week later for weekly tasks. The new task gets a `next_due` date and a unique ID, leaving the completed original intact in the task history.
+
+**Task filtering**
+`filter_tasks()` lets you query the full task list by any combination of `task_type`, `priority`, or `pet_name` without generating a full plan.
+
+---
+
 ## Getting started
 
 ### Setup

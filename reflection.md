@@ -61,6 +61,19 @@
 - Describe one tradeoff your scheduler makes.
 - Why is that tradeoff reasonable for this scenario?
 
+**Tradeoff: Greedy scheduling over optimal packing**
+
+The scheduler uses a greedy algorithm — it sorts tasks by priority and start_time, then adds each one in order as long as it fits within the owner's available time. Once a task is skipped because it would exceed the time budget, it stays skipped even if a shorter task later in the list could have filled that gap.
+
+For example: if the owner has 20 minutes left and the next task needs 30 minutes, it is skipped. A 15-minute task that appears later in the sorted list would fit, but the scheduler does not backtrack to try it.
+
+A more optimal approach — such as a knapsack algorithm — would evaluate all possible combinations and find the best-fitting set of tasks for the available time. However, that approach grows exponentially with the number of tasks and is significantly harder to reason about or debug.
+
+The greedy approach is a reasonable tradeoff for this scenario because:
+1. Pet care tasks are priority-ordered for a reason — a skipped HIGH priority task should be visible, not silently swapped out for a LOW priority one that happens to fit.
+2. The task counts in a typical day are small (5–15 tasks), so the greedy approach rarely wastes meaningful time.
+3. Simplicity matters — the scheduling reasoning log produced by the greedy approach is easy to read and explain to a non-technical user.
+
 ---
 
 ## 3. AI Collaboration

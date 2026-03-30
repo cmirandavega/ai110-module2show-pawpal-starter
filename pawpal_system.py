@@ -1,7 +1,12 @@
 from dataclasses import dataclass, field
 from typing import List, Optional
 from enum import Enum
+from collections import defaultdict, Counter
+import datetime
 import uuid
+
+# Minutes available per time-of-day slot (used for conflict detection)
+TIME_SLOT_BUDGET = {"morning": 120, "afternoon": 120, "evening": 120}
 
 
 class Priority(Enum):
@@ -18,8 +23,10 @@ class Task:
     duration: int           # in minutes
     priority: Priority
     time_of_day: Optional[str] = None   # "morning", "afternoon", "evening"
+    start_time: Optional[str] = None    # "HH:MM" format, e.g. "09:30"
     completed: bool = False
     frequency: str = "daily"            # daily, weekly, as-needed
+    next_due: Optional[str] = None      # "YYYY-MM-DD" date of next occurrence
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     def edit(self, field_name: str, value) -> None:
@@ -31,6 +38,26 @@ class Task:
     def mark_complete(self) -> None:
         """Mark this task as completed."""
         self.completed = True
+
+    def renew(self) -> Optional["Task"]:
+        """Return a new Task instance for the next occurrence, or None for as-needed tasks."""
+        today = datetime.date.today()
+        if self.frequency == "daily":
+            next_date = today + datetime.timedelta(days=1)
+        elif self.frequency == "weekly":
+            next_date = today + datetime.timedelta(weeks=1)
+        else:
+            return None  # as-needed tasks are not auto-renewed
+        return Task(
+            name=self.name,
+            task_type=self.task_type,
+            duration=self.duration,
+            priority=self.priority,
+            time_of_day=self.time_of_day,
+            start_time=self.start_time,
+            frequency=self.frequency,
+            next_due=str(next_date),
+        )
 
     def get_summary(self) -> str:
         """Return a readable one-line description of the task."""
@@ -119,15 +146,16 @@ class Scheduler:
         self.total_duration: int = 0
 
     def generate_plan(self) -> None:
-        """Build a daily plan from all owner tasks, respecting time and priority."""
+        """Build a daily plan from all owner tasks, respecting time, frequency, and priority."""
         self.scheduled_tasks = []
         self.reasoning = []
         self.total_duration = 0
 
         all_tasks = self.owner.get_all_tasks()
         incomplete = [t for t in all_tasks if not t.completed]
-        time_filtered = self._filter_by_time(incomplete)
-        sorted_tasks = self._sort_by_priority(time_filtered)
+        freq_filtered = self._filter_by_frequency(incomplete)
+        time_filtered = self._filter_by_time(freq_filtered)
+        sorted_tasks = self._sort_by_priority_and_time(time_filtered)
 
         for task in sorted_tasks:
             if self._fits_within_available_time(self.scheduled_tasks + [task]):
@@ -142,6 +170,23 @@ class Scheduler:
                     f"{self.owner.available_time} min"
                 )
 
+    def _filter_by_frequency(self, tasks: List[Task]) -> List[Task]:
+        """Include daily tasks always; weekly tasks only on Mondays; skip as-needed tasks."""
+        today = datetime.date.today().weekday()  # 0 = Monday
+        result = []
+        for t in tasks:
+            if t.frequency == "daily":
+                result.append(t)
+            elif t.frequency == "weekly":
+                if today == 0:
+                    result.append(t)
+                else:
+                    self.reasoning.append(
+                        f"Skipped '{t.name}' — weekly task, only scheduled on Mondays"
+                    )
+            # as-needed tasks are excluded unless manually added to the plan
+        return result
+
     def _filter_by_time(self, tasks: List[Task]) -> List[Task]:
         """
         If the owner has time-of-day preferences, prioritise matching tasks first.
@@ -154,9 +199,26 @@ class Scheduler:
         others = [t for t in tasks if t.time_of_day not in preferred_times]
         return preferred + others
 
+    @staticmethod
+    def _to_minutes(time_str: str) -> int:
+        """Convert 'HH:MM' string to total minutes since midnight."""
+        h, m = time_str.split(":")
+        return int(h) * 60 + int(m)
+
     def _sort_by_priority(self, tasks: List[Task]) -> List[Task]:
         """Sort tasks by Priority enum value (HIGH=1 first)."""
         return sorted(tasks, key=lambda t: t.priority.value)
+
+    def _sort_by_time(self, tasks: List[Task]) -> List[Task]:
+        """Sort tasks by start_time (HH:MM). Tasks without a time are placed last."""
+        return sorted(tasks, key=lambda t: self._to_minutes(t.start_time) if t.start_time else 9999)
+
+    def _sort_by_priority_and_time(self, tasks: List[Task]) -> List[Task]:
+        """Sort by priority first, then by start_time within the same priority level."""
+        return sorted(tasks, key=lambda t: (
+            t.priority.value,
+            self._to_minutes(t.start_time) if t.start_time else 9999
+        ))
 
     def _fits_within_available_time(self, tasks: List[Task]) -> bool:
         """Return True if the combined duration of tasks fits the owner's available time."""
@@ -175,6 +237,21 @@ class Scheduler:
         for pet in self.owner.pets:
             pet.remove_task(task_id)
 
+    def complete_task(self, task_id: str) -> Optional[Task]:
+        """Mark a task complete and auto-create the next occurrence for daily/weekly tasks.
+
+        Returns the new Task if one was created, or None for as-needed tasks.
+        """
+        for pet in self.owner.pets:
+            for task in pet.tasks:
+                if task.id == task_id:
+                    task.mark_complete()
+                    renewed = task.renew()
+                    if renewed:
+                        pet.add_task(renewed)
+                    return renewed
+        raise ValueError(f"No task with id '{task_id}' found.")
+
     def display(self) -> str:
         """Return a formatted string of the scheduled plan."""
         if not self.scheduled_tasks:
@@ -189,3 +266,68 @@ class Scheduler:
         if not self.reasoning:
             return "No reasoning available. Call generate_plan() first."
         return "\n".join(f"- {r}" for r in self.reasoning)
+
+    def detect_conflicts(self) -> List[str]:
+        """Flag time slot overloads, duplicate task types, and start_time window overlaps."""
+        active = [t for t in self.owner.get_all_tasks() if not t.completed]
+        return self._check_slot_conflicts(active) + self._check_overlap_conflicts(active)
+
+    def _check_slot_conflicts(self, tasks: List[Task]) -> List[str]:
+        """Flag slots where total duration exceeds budget or task types are duplicated."""
+        conflicts = []
+        slot_groups: dict = defaultdict(list)
+        for task in tasks:
+            if task.time_of_day:
+                slot_groups[task.time_of_day].append(task)
+
+        for slot, slot_tasks in slot_groups.items():
+            total = sum(t.duration for t in slot_tasks)
+            if total > TIME_SLOT_BUDGET.get(slot, 120):
+                names = ", ".join(t.name for t in slot_tasks)
+                conflicts.append(
+                    f"Time overload in {slot}: {total} min [{names}] "
+                    f"exceeds {TIME_SLOT_BUDGET[slot]} min budget"
+                )
+            for task_type, count in Counter(t.task_type for t in slot_tasks).items():
+                if count > 1:
+                    conflicts.append(
+                        f"Duplicate '{task_type}' tasks in {slot} slot ({count} tasks)"
+                    )
+        return conflicts
+
+    def _check_overlap_conflicts(self, tasks: List[Task]) -> List[str]:
+        """Flag pairs of tasks whose start_time windows physically overlap."""
+        conflicts = []
+        timed = sorted(
+            [t for t in tasks if t.start_time],
+            key=lambda t: self._to_minutes(t.start_time)
+        )
+        for i, a in enumerate(timed):
+            a_end = self._to_minutes(a.start_time) + a.duration
+            for b in timed[i + 1:]:
+                b_start = self._to_minutes(b.start_time)
+                if b_start >= a_end:
+                    break  # sorted, so no further overlaps possible
+                conflicts.append(
+                    f"Overlap: '{a.name}' ({a.start_time}, {a.duration} min) and "
+                    f"'{b.name}' ({b.start_time}, {b.duration} min) "
+                    f"overlap by {a_end - b_start} min"
+                )
+        return conflicts
+
+    def filter_tasks(self, task_type: str = None, priority: Priority = None, pet_name: str = None) -> List[Task]:
+        """Return tasks matching all provided filters (None = no filter on that field)."""
+        if pet_name:
+            tasks = []
+            for pet in self.owner.pets:
+                if pet.name == pet_name:
+                    tasks = list(pet.tasks)
+                    break
+        else:
+            tasks = self.owner.get_all_tasks()
+
+        if task_type is not None:
+            tasks = [t for t in tasks if t.task_type == task_type]
+        if priority is not None:
+            tasks = [t for t in tasks if t.priority == priority]
+        return tasks
