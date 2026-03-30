@@ -46,6 +46,39 @@ When a task is marked complete via `complete_task()`, the scheduler automaticall
 
 ---
 
+## Testing PawPal+
+
+### Running the tests
+
+```bash
+python -m pytest
+```
+
+To see detailed output for each test:
+
+```bash
+python -m pytest -v
+```
+
+### What the tests cover
+
+The test suite in `tests/test_pawpal.py` contains 22 tests across four areas:
+
+| Area | What is verified |
+|---|---|
+| **Sorting correctness** | Tasks are returned in chronological order; HIGH priority always comes before LOW; tasks with no `start_time` are placed last; time is used as a tiebreaker within the same priority level |
+| **Recurrence logic** | Completing a daily task creates a new task due tomorrow; weekly tasks renew 7 days out; `as-needed` tasks produce no renewal; all original fields (name, duration, priority) are preserved on the renewed task |
+| **Conflict detection** | Overlapping time windows are flagged with the exact overlap in minutes; touching tasks (no gap, no overlap) are not falsely flagged; slot overloads above 120 min are caught; duplicate task types in the same slot are reported; the exact-120-min boundary does not trigger a false overload |
+| **Time budget** | Tasks that would exceed `available_time` are skipped and logged; a zero-minute budget produces an empty plan; tasks whose combined duration exactly equals the budget are all included |
+
+### Confidence Level
+
+★★★★☆ (4 / 5)
+
+All 22 tests pass and cover the core scheduling behaviors, edge cases, and boundary conditions. One star is withheld because the test suite does not yet cover the Streamlit UI layer or multi-pet scheduling interactions, so end-to-end behavior in the app remains manually verified only.
+
+---
+
 ## Getting started
 
 ### Setup
