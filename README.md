@@ -1,6 +1,55 @@
-# PawPal+ (Module 2 Project)
+# PawPal+
 
-You are building **PawPal+**, a Streamlit app that helps a pet owner plan care tasks for their pet.
+**PawPal+** is a smart pet care scheduling app built with Python and Streamlit. It helps busy pet owners stay on top of daily care tasks by building a prioritized, conflict-free daily plan — and explaining every decision it makes.
+
+---
+
+![PawPal+ Demo](Demo_PawPal.png)
+
+---
+
+## Features
+
+### Owner & Pet Setup
+Enter your name, how many minutes you have available today, and your pet's details (name, species, breed, age). The app creates a dedicated scheduler for your pet the moment you save.
+
+### Task Management
+Add any number of care tasks with full control over:
+- **Name and type** — walk, feeding, meds, grooming, enrichment
+- **Duration** — how many minutes the task takes
+- **Priority** — HIGH, MEDIUM, or LOW
+- **Start time** — picked with an AM/PM clock; the app automatically classifies the time slot (morning, afternoon, or evening)
+- **Frequency** — daily, weekly, or as-needed
+
+### Priority + Time Sorting
+The scheduler sorts every task by **priority first** (HIGH → MEDIUM → LOW), then by **start time** as a tiebreaker within the same priority level. Tasks with no start time are always placed last. This ensures the most important tasks are always attempted first and the day flows in chronological order.
+
+### Available Time Budget
+The scheduler only adds tasks to the daily plan while they fit within the owner's available time. The moment a task would push the total over the limit, it is skipped and the reason is logged in the Scheduling Reasoning panel. Tasks whose combined duration exactly matches the budget are all included.
+
+### Frequency Filtering
+- **Daily** tasks are included every day
+- **Weekly** tasks are only scheduled on Mondays
+- **As-needed** tasks are never auto-scheduled — they require manual placement
+
+Every skipped task is recorded in the reasoning log so you always know why something was left out.
+
+### Real-Time Conflict Prevention
+Before a task is saved, the app runs conflict detection. If the new task would introduce a problem, it is **rejected immediately** with a clear explanation — it is never added to the list. Two types of conflicts are caught:
+- **Time window overlap** — two tasks whose start time + duration windows physically overlap, with the exact overlap in minutes reported
+- **Slot overload** — tasks in the same time slot (morning / afternoon / evening) whose combined duration exceeds the 120-minute budget
+
+### Daily Recurrence
+Marking a task complete via the **Mark a Task Complete** panel automatically creates a fresh copy for the next occurrence — tomorrow for daily tasks, one week later for weekly tasks. The original completed task is preserved in history. As-needed tasks produce no renewal. The schedule table updates instantly to show ✅ Done.
+
+### Schedule Display
+After generating a plan the app shows:
+- **Metric tiles** — tasks scheduled, total time used, tasks skipped
+- **Sorted schedule table** — color-coded priority (🔴 HIGH, 🟡 MEDIUM, 🟢 LOW), start time in AM/PM format, live completion status
+- **Scheduling Reasoning** — expandable panel showing why each task was included or skipped
+- **Conflict Report** — expandable panel listing any remaining conflicts in the full task list
+
+---
 
 ## Scenario
 
@@ -9,40 +58,6 @@ A busy pet owner needs help staying consistent with pet care. They want an assis
 - Track pet care tasks (walks, feeding, meds, enrichment, grooming, etc.)
 - Consider constraints (time available, priority, owner preferences)
 - Produce a daily plan and explain why it chose that plan
-
-Your job is to design the system first (UML), then implement the logic in Python, then connect it to the Streamlit UI.
-
-## What you will build
-
-Your final app should:
-
-- Let a user enter basic owner + pet info
-- Let a user add/edit tasks (duration + priority at minimum)
-- Generate a daily schedule/plan based on constraints and priorities
-- Display the plan clearly (and ideally explain the reasoning)
-- Include tests for the most important scheduling behaviors
-
-## Smarter Scheduling
-
-The scheduling logic in `pawpal_system.py` has been upgraded with several algorithms that make the daily plan more intelligent and realistic.
-
-**Priority + time sorting**
-Tasks are sorted by priority first (HIGH → MEDIUM → LOW), then by `start_time` within the same priority level. A `start_time` field in `HH:MM` format was added to `Task` so the scheduler can order tasks chronologically across the day rather than by insertion order.
-
-**Frequency filtering**
-Tasks have a `frequency` field (`daily`, `weekly`, `as-needed`). The scheduler now acts on it — daily tasks are always included, weekly tasks are only scheduled on Mondays, and as-needed tasks are excluded unless manually added. Skipped tasks are logged in the scheduling reasoning.
-
-**Conflict detection**
-Before or after generating a plan, `detect_conflicts()` checks for three types of problems:
-- Time slot overload — tasks in the same slot (morning/afternoon/evening) exceed the 120-minute slot budget
-- Duplicate task types — two tasks of the same type (e.g. two `feeding` tasks) in the same slot
-- Window overlap — two tasks whose `start_time` + `duration` windows physically overlap, with the exact overlap in minutes reported
-
-**Recurring task renewal**
-When a task is marked complete via `complete_task()`, the scheduler automatically creates a fresh copy for the next occurrence — tomorrow for daily tasks, one week later for weekly tasks. The new task gets a `next_due` date and a unique ID, leaving the completed original intact in the task history.
-
-**Task filtering**
-`filter_tasks()` lets you query the full task list by any combination of `task_type`, `priority`, or `pet_name` without generating a full plan.
 
 ---
 

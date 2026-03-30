@@ -213,13 +213,16 @@ def test_conflict_no_overload_at_exactly_120_min():
 
 
 def test_conflict_duplicate_task_type_in_same_slot():
-    """Two tasks of the same type in the same time slot should be flagged as duplicates."""
+    """Two tasks of the same type in the same slot should NOT be flagged.
+    A pet can legitimately have two walks in one slot (morning + after breakfast).
+    Timing conflicts are caught by the overlap check instead.
+    """
     scheduler, pet = make_scheduler()
     pet.add_task(make_task("Walk 1", task_type="walk", time_of_day="morning", duration=30))
     pet.add_task(make_task("Walk 2", task_type="walk", time_of_day="morning", duration=30))
 
     conflicts = scheduler.detect_conflicts()
-    assert any("Duplicate" in c for c in conflicts)
+    assert not any("Duplicate" in c for c in conflicts)
 
 
 def test_conflict_same_type_different_slots_no_conflict():

@@ -54,7 +54,16 @@
 **a. Constraints and priorities**
 
 - What constraints does your scheduler consider (for example: time, priority, preferences)?
+
+  The scheduler considers three main constraints:
+
+  1. **Available time** — the owner sets how many minutes they have in the day. The scheduler stops adding tasks the moment the total duration would exceed that budget.
+  2. **Priority** — every task is tagged HIGH, MEDIUM, or LOW. The scheduler always attempts HIGH priority tasks first, so critical care (meds, feeding) is never pushed out by optional activities.
+  3. **Start time** — tasks with an assigned start time are sorted chronologically within their priority group, so the plan reflects a realistic flow through the day rather than an arbitrary insertion order.
+
 - How did you decide which constraints mattered most?
+
+  The most important constraint is available time combined with priority. A schedule that ignores the owner's time limit is useless, and a schedule that doesn't protect high-priority tasks defeats the purpose of the app. Start time was added as a secondary constraint because sorting by priority alone would group tasks correctly but leave them in a random order within the day.
 
 **b. Tradeoffs**
 
@@ -81,12 +90,22 @@ The greedy approach is a reasonable tradeoff for this scenario because:
 **a. How you used AI**
 
 - How did you use AI tools during this project (for example: design brainstorming, debugging, refactoring)?
+
+  AI was used throughout the project for multiple purposes. During design it helped think through class responsibilities and catch missing relationships (like the Owner → Pet link that existed in the UML but not in the code). During implementation it helped write the scheduling logic, conflict detection, and the Streamlit UI. During testing it helped generate the test plan and write the pytest suite. It was also used for debugging when features like the schedule disappearing after marking a task complete needed a fix.
+
 - What kinds of prompts or questions were most helpful?
+
+  The most useful prompts were specific and gave context — for example asking "before going through with this code, would we need to change anything in pawpal_system.py to accommodate these changes?" rather than just asking for the code change directly. Asking the AI to explain what it was about to do and how it would affect everything else helped catch potential side effects before they became bugs.
 
 **b. Judgment and verification**
 
 - Describe one moment where you did not accept an AI suggestion as-is.
+
+  When the AI suggested removing the duplicate task type conflict check entirely from `_check_slot_conflicts`, it was first questioned because that check existed for a reason. Rather than accepting the removal immediately, the reasoning was discussed — the AI explained that the overlap detection in `_check_overlap_conflicts` already handles the real timing conflict, and that flagging same-type tasks is too strict for pet care (a dog genuinely needs two walks per day). Only after that explanation made sense was the change accepted.
+
 - How did you evaluate or verify what the AI suggested?
+
+  Suggestions were verified in two ways: by asking the AI to explain each change and how it would affect the rest of the system before approving it, and by constantly testing each change in the running app to catch anything the AI missed. Several issues — like the schedule disappearing on rerun, the time display not updating after marking complete, and the duplicate walk conflict — were caught through hands-on testing rather than the AI flagging them proactively.
 
 ---
 
@@ -95,12 +114,31 @@ The greedy approach is a reasonable tradeoff for this scenario because:
 **a. What you tested**
 
 - What behaviors did you test?
+
+  The test suite covers four core areas across 22 tests:
+
+  1. **Sorting correctness** — verified that tasks come out in priority order (HIGH before LOW), that start time is used as a tiebreaker within the same priority, and that tasks with no start time are always placed last.
+  2. **Recurrence logic** — verified that completing a daily task creates a new task due tomorrow, a weekly task renews 7 days out, an as-needed task produces no renewal, and that all original fields (name, duration, priority) carry over to the renewed task.
+  3. **Conflict detection** — verified that overlapping time windows are flagged with the exact overlap in minutes, that touching tasks (one ends exactly when the next starts) are not falsely flagged, and that slot overloads above 120 minutes are caught while exactly 120 minutes is not.
+  4. **Time budget** — verified that tasks exceeding the owner's available time are skipped, that a zero-minute budget produces an empty plan, and that tasks whose combined duration exactly equals the budget are all included.
+
 - Why were these tests important?
+
+  These behaviors are the core of what makes PawPal+ useful. If sorting is wrong, the daily plan is misleading. If recurrence breaks, the owner loses track of recurring care. If conflict detection has false positives or false negatives, either valid tasks get blocked or real problems go unreported. If the time budget isn't enforced correctly, the schedule becomes impossible to follow. Testing these ensured the logic was trustworthy before connecting it to the UI.
 
 **b. Confidence**
 
 - How confident are you that your scheduler works correctly?
+
+  ★★★★☆ (4 / 5) — All 22 tests pass and cover the most important behaviors, boundary conditions, and edge cases in the backend logic. The confidence gap comes from the UI layer and multi-pet scheduling not being covered by automated tests. Those flows were verified manually through testing the running app, but manual testing is less reliable than automated tests.
+
 - What edge cases would you test next if you had more time?
+
+  - Multi-pet scheduling — verifying that tasks across two pets are sorted and conflict-checked correctly together
+  - Tasks added after a plan is already generated — confirming the plan regenerates cleanly without stale data
+  - Weekly tasks on days other than Monday — ensuring they are consistently excluded and logged
+  - Marking all tasks complete in one session — verifying the renewal chain works correctly back-to-back
+  - Very large task lists — checking that performance and sort order hold up with 20+ tasks
 
 ---
 
@@ -110,10 +148,16 @@ The greedy approach is a reasonable tradeoff for this scenario because:
 
 - What part of this project are you most satisfied with?
 
+  The conflict prevention system is the part that came together best. Rather than just flagging conflicts after the fact, the app blocks a task from being added the moment it would create a problem and explains exactly why. It does this by running a tentative-add check — adding the task, detecting whether any new conflicts appeared, and rolling it back if they did. That combination of proactive blocking and clear feedback makes the app feel genuinely useful rather than just a list manager.
+
 **b. What you would improve**
 
 - If you had another iteration, what would you improve or redesign?
 
+  The biggest improvement would be an edit task feature. Right now if a task was added with the wrong time or duration the only option is to remove and re-add it. Adding an inline edit directly in the task table would make the app much more practical. A second improvement would be multi-pet support in the UI — the backend already supports multiple pets through the Owner class, but the app only exposes one pet at a time. Exposing that would make PawPal+ genuinely useful for households with more than one animal.
+
 **c. Key takeaway**
 
 - What is one important thing you learned about designing systems or working with AI on this project?
+
+  The most important thing learned was that AI is most useful when you treat it as a collaborator to question, not an authority to follow. Every time a suggestion was asked to be explained before being accepted — and every time the running app was tested after a change — something was caught that the AI either missed or didn't flag. The habit of asking "how will this affect everything else?" before approving a change saved several bugs from making it into the final app. AI speeds up the work significantly, but the judgment about whether something is actually correct still has to come from the person using it.
